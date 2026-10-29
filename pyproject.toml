@@ -1,0 +1,16 @@
+[project]
+name = "workout-plan-generator"
+version = "0.1.0"
+description = "Personalized AI Workout & Rehab Plan Generator built with Streamlit and Groq"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "groq>=0.18.0",
+    "streamlit>=1.40.0",
+    "python-dotenv>=1.0.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

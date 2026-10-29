@@ -1,0 +1,19 @@
+# Environments & uv
+.venv/
+uv.lock
+*.env
+!.env.sample
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# OS specific
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
