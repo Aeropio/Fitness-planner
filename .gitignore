@@ -1,6 +1,5 @@
 # Environments & uv
 .venv/
-uv.lock
 *.env
 !.env.sample
 
