@@ -105,8 +105,8 @@ uv run python workout_generator.py
 
 ### Step 5: Exercise Swapper Test (Clinical Substitution Stretch Goal)
 1. Expand the **🔄 Exercise Swapper** section.
-2. Enter:
-   - *Exercise to replace:* `Romanian Deadlift`
+2. Select or enter:
+   - *Exercise to replace:* Select any recommended exercise from the dropdown (or choose custom)
    - *Reason:* `Lower back soreness / lumbar flexion sensitivity`
 3. Click **Find Safe Clinical Substitutions**.
 **Expected Outcome:**

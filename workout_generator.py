@@ -276,7 +276,7 @@ def generate_workout_plan(
                 {"role": "user", "content": user_prompt},
             ],
             temperature=temperature,
-            max_tokens=4096,
+            max_tokens=2500,
         )
 
         if not completion.choices or not completion.choices[0].message:
@@ -359,6 +359,74 @@ Keep the response crisp and structured in markdown.
         raise LLMServiceError(f"Failed to swap exercise: {str(exc)}") from exc
 
 
+def extract_exercises_from_plan(plan_text: str) -> list[str]:
+    """
+    Parses a markdown workout plan and extracts unique exercise names
+    from the structured tables and workout sections for user convenience.
+    """
+    exercises: list[str] = []
+    if not plan_text or not plan_text.strip():
+        return exercises
+
+    import re
+    lines = plan_text.splitlines()
+    in_table = False
+    col_idx = 0
+
+    for line in lines:
+        line_str = line.strip()
+        if not line_str.startswith("|"):
+            in_table = False
+            continue
+
+        cells = [c.strip() for c in line_str.split("|")[1:-1]]
+        if not cells:
+            continue
+
+        lower_cells = [c.lower() for c in cells]
+        if any("exercise" in c for c in lower_cells):
+            in_table = True
+            for i, c in enumerate(lower_cells):
+                if "exercise" in c:
+                    col_idx = i
+                    break
+            continue
+
+        # Skip markdown separator rows like | :--- | ---: |
+        if all(re.match(r"^:?-+:?$", c) for c in cells):
+            continue
+
+        if in_table and len(cells) > col_idx:
+            raw_name = cells[col_idx]
+            cleaned = re.sub(r"[*_`]", "", raw_name).strip()
+            cleaned = re.sub(r"^\d+\.\s*", "", cleaned).strip()
+            # Filter out table headings or invalid tokens
+            if (
+                cleaned
+                and len(cleaned) < 80
+                and cleaned.lower() not in ["exercise", "warm-up", "cool-down", "rest", "none", "-", "n/a"]
+            ):
+                if cleaned not in exercises:
+                    exercises.append(cleaned)
+
+    # Fallback: if table parsing found no exercises, look for bolded items in lists
+    if not exercises:
+        pattern = r"^(?:[-*]|\d+\.)\s+\*\*([^*]+)\*\*"
+        for line in lines:
+            m = re.match(pattern, line.strip())
+            if m:
+                name = m.group(1).split(":")[0].strip()
+                if (
+                    name
+                    and name not in exercises
+                    and len(name) < 60
+                    and not any(kw in name.lower() for kw in ["day", "warm-up", "cool-down", "rest", "focus", "goal"])
+                ):
+                    exercises.append(name)
+
+    return exercises
+
+
 if __name__ == "__main__":
     # Self-test routine for CLI / verification
     import sys
@@ -378,6 +446,15 @@ if __name__ == "__main__":
         print("✗ Validator failed to catch 0 days!")
     except InvalidInputError:
         print("✓ Input validator correctly rejected 0 days.")
+
+    # Test exercise parser
+    sample_table = (
+        "| Exercise | Sets | Reps |\n| :--- | :---: | :---: |\n"
+        "| **Goblet Squat** | 3 | 10 |\n| Dumbbell Row | 3 | 12 |\n"
+    )
+    parsed = extract_exercises_from_plan(sample_table)
+    assert "Goblet Squat" in parsed and "Dumbbell Row" in parsed, "Exercise parser failed"
+    print("✓ Exercise extractor successfully parsed exercises from markdown tables.")
 
     # Optional Live API verification if GROQ_API_KEY is detected
     api_key = os.getenv("GROQ_API_KEY")

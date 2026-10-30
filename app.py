@@ -21,6 +21,7 @@ except Exception:
 from workout_generator import (
     generate_workout_plan,
     swap_exercise,
+    extract_exercises_from_plan,
     VALID_GOALS,
     VALID_LEVELS,
     VALID_EQUIPMENT,
@@ -68,13 +69,16 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # Environment API Key or Manual Entry
+    # Environment / Streamlit Cloud Secrets API Key or Manual Entry
     env_key = os.getenv("GROQ_API_KEY", "")
+    if not env_key and hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+        env_key = st.secrets["GROQ_API_KEY"]
+
     api_key_input = st.text_input(
         "Groq API Key",
         value=env_key,
         type="password",
-        help="Reads GROQ_API_KEY from .env by default. You can override it here.",
+        help="Reads GROQ_API_KEY from .env (locally) or Streamlit Secrets (in production). You can override it here.",
     )
 
     available_models = get_available_models(api_key_input or env_key)
@@ -244,29 +248,52 @@ if st.session_state["workout_plan"]:
     with st.expander("🔄 Exercise Swapper: Need a modification or substitute?"):
         st.markdown(
             "If an exercise feels uncomfortable, aggravates a joint, or you lack a specific setup, "
-            "request targeted clinical alternatives below without re-running the entire week."
+            "select it from the list below to get targeted clinical alternatives without re-running the entire week."
         )
+
+        # Extract all recommended exercises from the generated plan
+        recommended_exercises = extract_exercises_from_plan(st.session_state["workout_plan"])
+
         swap_col1, swap_col2 = st.columns(2)
         with swap_col1:
-            exercise_to_swap = st.text_input(
-                "Exercise to Replace",
-                placeholder="e.g. Barbell Back Squat, Romanian Deadlift, Push-ups",
-            )
+            if recommended_exercises:
+                options = ["-- Select an exercise to replace --"] + recommended_exercises + ["➕ Enter custom exercise..."]
+                selected_option = st.selectbox(
+                    "Exercise to Replace (From Your Plan)",
+                    options=options,
+                    index=0,
+                    help="Select an exercise recommended in your plan, or choose custom to type another.",
+                )
+                if selected_option == "➕ Enter custom exercise...":
+                    exercise_to_swap = st.text_input(
+                        "Custom Exercise Name",
+                        placeholder="e.g. Barbell Back Squat, Romanian Deadlift",
+                    )
+                elif selected_option == "-- Select an exercise to replace --":
+                    exercise_to_swap = ""
+                else:
+                    exercise_to_swap = selected_option
+            else:
+                exercise_to_swap = st.text_input(
+                    "Exercise to Replace",
+                    placeholder="e.g. Barbell Back Squat, Romanian Deadlift, Push-ups",
+                )
+
         with swap_col2:
             swap_reason = st.text_input(
-                "Reason / Joint Issue",
-                placeholder="e.g. Anterior knee pain at 90 deg, wrist pain in extension",
+                "Reason / Joint Issue (Optional)",
+                placeholder="e.g. Anterior knee pain at 90 deg, wrist pain, lack equipment",
             )
 
         if st.button("Find Safe Clinical Substitutions"):
-            if not exercise_to_swap:
-                st.warning("Please specify the name of the exercise you want to replace.")
+            if not exercise_to_swap or not exercise_to_swap.strip():
+                st.warning("Please select or enter the exercise you want to replace.")
             else:
                 with st.spinner("Consulting clinical biomechanics database..."):
                     try:
                         swap_suggestion = swap_exercise(
                             current_plan=st.session_state["workout_plan"],
-                            exercise_to_replace=exercise_to_swap,
+                            exercise_to_replace=exercise_to_swap.strip(),
                             reason_or_limitation=swap_reason or "Discomfort / unavailable",
                             equipment_access=equipment_access,
                             api_key=api_key_input,
