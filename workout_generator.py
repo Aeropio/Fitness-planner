@@ -28,8 +28,40 @@ VALID_GOALS = ["Build muscle", "Lose fat", "General fitness", "Improve endurance
 VALID_LEVELS = ["Beginner", "Intermediate", "Advanced"]
 VALID_EQUIPMENT = ["No equipment", "Home dumbbells", "Full gym"]
 
-# Default model configuration
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+# Default model configuration (active and supported on Groq)
+DEFAULT_MODEL = "qwen/qwen3.8-27b"
+
+
+def get_available_models(api_key: Optional[str] = None) -> list[str]:
+    """
+    Retrieves available text generation models from Groq for the given API key.
+    Filters out non-chat models (such as whisper, guardrails, or TTS).
+    Falls back to active supported models if offline or if query fails.
+    """
+    fallback_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+    effective_api_key = api_key or os.getenv("GROQ_API_KEY")
+    if not effective_api_key or not effective_api_key.strip():
+        return fallback_models
+
+    try:
+        from groq import Groq
+        client = Groq(api_key=effective_api_key.strip())
+        model_list = client.models.list()
+
+        excluded_keywords = ["whisper", "guard", "orpheus", "safeguard"]
+        chat_models = [
+            m.id for m in model_list.data
+            if not any(kw in m.id.lower() for kw in excluded_keywords)
+        ]
+
+        preferred_order = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+        sorted_models = [m for m in preferred_order if m in chat_models]
+        remaining = [m for m in chat_models if m not in preferred_order]
+        result = sorted_models + sorted(remaining)
+
+        return result if result else fallback_models
+    except Exception:
+        return fallback_models
 
 
 class WorkoutGeneratorError(Exception):
@@ -347,4 +379,23 @@ if __name__ == "__main__":
     except InvalidInputError:
         print("✓ Input validator correctly rejected 0 days.")
 
-    print("To test live Groq calls, run: python workout_generator.py with GROQ_API_KEY set.")
+    # Optional Live API verification if GROQ_API_KEY is detected
+    api_key = os.getenv("GROQ_API_KEY")
+    if api_key and api_key.strip():
+        print(f"\n--- Live Groq API Test (Model: {DEFAULT_MODEL}) ---")
+        try:
+            sample_plan = generate_workout_plan(
+                fitness_goal="General fitness",
+                experience_level="Beginner",
+                days_per_week=2,
+                equipment_access="No equipment",
+                limitations="None",
+                model=DEFAULT_MODEL,
+            )
+            print("✓ Live workout plan generated successfully!")
+            print(f"✓ Plan preview ({len(sample_plan)} chars):\n")
+            print(sample_plan[:350] + "...\n")
+        except Exception as err:
+            print(f"✗ Live generation failed: {err}")
+    else:
+        print("\nℹ️ Tip: To test live Groq calls, ensure GROQ_API_KEY is set in your .env file.")

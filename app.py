@@ -7,10 +7,17 @@ Engineered with Physical Therapy & CSCS Principles for safe, joint-friendly prog
 
 from __future__ import annotations
 
+import importlib
 import os
 import streamlit as st
 
-# Domain service & exceptions
+# Domain service & exceptions (with reload to avoid stale Streamlit sys.modules cache)
+import workout_generator
+try:
+    importlib.reload(workout_generator)
+except Exception:
+    pass
+
 from workout_generator import (
     generate_workout_plan,
     swap_exercise,
@@ -22,6 +29,14 @@ from workout_generator import (
     APIRateLimitError,
     LLMServiceError,
 )
+
+# Resilient model helper resolution
+try:
+    from workout_generator import get_available_models, DEFAULT_MODEL
+except ImportError:
+    DEFAULT_MODEL = "qwen/qwen3.8-27b"
+    def get_available_models(api_key: str | None = None) -> list[str]:
+        return ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
 
 # Page configuration
 st.set_page_config(
@@ -48,8 +63,7 @@ if "swapped_results" not in st.session_state:
 # Sidebar: Configuration & API Key
 # ---------------------------------------------------------
 with st.sidebar:
-    st.image("https://img.icons8.com/isometric/100/physical-therapy.png", width=64)
-    st.title("KineticAI Config")
+    st.title("🏋️‍♂️ KineticAI Config")
     st.caption("Clinical Biomechanics & Injury-Free Programming")
 
     st.markdown("---")
@@ -63,11 +77,18 @@ with st.sidebar:
         help="Reads GROQ_API_KEY from .env by default. You can override it here.",
     )
 
+    available_models = get_available_models(api_key_input or env_key)
+    default_idx = (
+        available_models.index(DEFAULT_MODEL)
+        if DEFAULT_MODEL in available_models
+        else 0
+    )
+
     model_choice = st.selectbox(
         "LLM Engine",
-        options=["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-        index=0,
-        help="High-capacity models like Llama 3.3 70B yield superior clinical nuance.",
+        options=available_models,
+        index=default_idx,
+        help="Active Groq models. High-capacity models like Qwen 3.8 and GPT-OSS yield superior clinical nuance.",
     )
 
     st.markdown("---")
@@ -213,8 +234,8 @@ if st.session_state["workout_plan"]:
             use_container_width=True,
         )
 
-    # Render Markdown Plan
-    st.markdown(st.session_state["workout_plan"])
+    # Render Markdown Plan (unsafe_allow_html=True renders <br> line breaks inside tables)
+    st.markdown(st.session_state["workout_plan"], unsafe_allow_html=True)
 
     # ---------------------------------------------------------
     # Stretch Goal: Exercise Swapper (Clinical Substitution)
@@ -257,5 +278,5 @@ if st.session_state["workout_plan"]:
 
         if st.session_state.get("swapped_results"):
             st.markdown("### Suggested Clinical Replacements:")
-            st.markdown(st.session_state["swapped_results"])
+            st.markdown(st.session_state["swapped_results"], unsafe_allow_html=True)
 
