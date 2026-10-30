@@ -69,19 +69,37 @@ with st.sidebar:
 
     st.markdown("---")
     
-    # Environment / Streamlit Cloud Secrets API Key or Manual Entry
-    env_key = os.getenv("GROQ_API_KEY", "")
-    if not env_key and hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
-        env_key = st.secrets["GROQ_API_KEY"]
+    # ---------------------------------------------------------
+    # Secure API Key Management:
+    # Resolve server-side key (.env locally or st.secrets on Streamlit Cloud)
+    # The actual secret is NEVER sent to the client browser in value="...".
+    # ---------------------------------------------------------
+    server_key = os.getenv("GROQ_API_KEY", "")
+    if not server_key and hasattr(st, "secrets") and "GROQ_API_KEY" in st.secrets:
+        server_key = str(st.secrets["GROQ_API_KEY"]).strip()
 
-    api_key_input = st.text_input(
-        "Groq API Key",
-        value=env_key,
-        type="password",
-        help="Reads GROQ_API_KEY from .env (locally) or Streamlit Secrets (in production). You can override it here.",
-    )
+    has_server_key = bool(server_key and server_key.strip())
 
-    available_models = get_available_models(api_key_input or env_key)
+    if has_server_key:
+        st.success("🔒 System Groq Key Active")
+        user_override = st.text_input(
+            "API Key (Optional Override)",
+            type="password",
+            placeholder="Using secure server key...",
+            help="A managed Groq API key is active on the server. Your key is safe and never exposed to visitors. Enter a personal key here only if you wish to override it.",
+        )
+        effective_api_key = user_override.strip() if user_override.strip() else server_key
+    else:
+        st.warning("🔑 Groq API Key Required")
+        user_override = st.text_input(
+            "Groq API Key",
+            type="password",
+            placeholder="gsk_...",
+            help="Enter your Groq API key to generate workouts.",
+        )
+        effective_api_key = user_override.strip()
+
+    available_models = get_available_models(effective_api_key)
     default_idx = (
         available_models.index(DEFAULT_MODEL)
         if DEFAULT_MODEL in available_models
@@ -187,7 +205,7 @@ if should_run:
                 days_per_week=days_per_week,
                 equipment_access=equipment_access,
                 limitations=limitations,
-                api_key=api_key_input,
+                api_key=effective_api_key,
                 model=model_choice,
                 temperature=temp,
             )
@@ -296,7 +314,7 @@ if st.session_state["workout_plan"]:
                             exercise_to_replace=exercise_to_swap.strip(),
                             reason_or_limitation=swap_reason or "Discomfort / unavailable",
                             equipment_access=equipment_access,
-                            api_key=api_key_input,
+                            api_key=effective_api_key,
                             model=model_choice,
                         )
                         st.session_state["swapped_results"] = swap_suggestion
